@@ -1,0 +1,102 @@
+# This yaml file is for setup a wordpress environment for wordpress theme development
+version: '3'
+  
+services:
+  
+  # MySQL 
+  db:
+    build: 
+      context: ./bin/db
+    image: ${APP_NAME}_mysql:1.0
+    container_name: ${APP_NAME}_mysql
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - 3306:3306
+    volumes:
+      - mysql-vol:/var/lib/mysql
+    networks:
+      - blh_nt
+
+  # WordPress
+  wp:
+    depends_on:
+      - db  
+    build: 
+      context: ./bin/wp  
+    image: ${APP_NAME}_wp:1.0
+    container_name: ${APP_NAME}_wp
+    restart: unless-stopped
+    env_file: .env
+    extra_hosts:
+      - "www.blhinc.localhost:172.18.0.6"
+      - "blhinc.localhost:172.18.0.6"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+      WORDPRESS_TABLE_PREFIX: wp_
+      WORDPRESS_DEBUG: 1
+      LOCAL_USER_ID: ${LOCAL_USER_ID}
+      LOCAL_USER_NAME: ${LOCAL_USER_NAME}
+    volumes:
+      - ./src:/var/www/html/ 
+      - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+    networks:
+      - blh_nt
+    stdin_open: true
+    tty: true
+
+  # PHP-MyAdmin   
+  php-myadmin:
+    image: phpmyadmin/phpmyadmin:4.9
+    container_name: ${APP_NAME}_phpmyadmin
+    ports:
+      - 8081:80
+    environment:
+      PMA_HOST: db:3306
+      PMA_PORT: 3306 
+    networks:
+      - blh_nt
+    links:
+      - db
+
+  # MailHog
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: ${APP_NAME}_mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"  
+    networks:
+      - blh_nt    
+
+  # NGINX
+  nginx:
+    depends_on:
+      - wp
+    image: nginx:1.10.3
+    container_name: ${APP_NAME}_nginx
+    restart: unless-stopped
+    volumes:  
+      - ./src:/var/www/html
+      - ./certs:/etc/certs
+      - ./nginx-conf:/etc/nginx/conf.d
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - blh_nt
+
+# using this named volume ensures db's hang around between "up's"
+volumes:
+    mysql-vol:
+networks:
+  blh_nt:
+    driver: bridge
